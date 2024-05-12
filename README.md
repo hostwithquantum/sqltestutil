@@ -1,8 +1,10 @@
 # sqltestutil
 
-[![Documentation](https://godoc.org/github.com/bitcomplete/sqltestutil?status.svg)](http://godoc.org/github.com/bitcomplete/sqltestutil)
+[![Documentation](https://godoc.org/github.com/hostwithquantum/sqltestutil?status.svg)](http://godoc.org/github.com/hostwithquantum/sqltestutil)
 
 Utilities for testing Golang code that runs SQL.
+
+> This is a fork, to use: `go get github.com/hostwithquantum/sqltestutil`
 
 ## Usage
 
