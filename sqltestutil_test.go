@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bitcomplete/sqltestutil"
+	"github.com/hostwithquantum/sqltestutil"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/suite"
 )
