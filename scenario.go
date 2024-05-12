@@ -3,7 +3,7 @@ package sqltestutil
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 
 	"github.com/go-yaml/yaml"
@@ -14,26 +14,26 @@ import (
 // db. Top-level keys in the YAML are treated as table names having repeated
 // rows, where keys on each row are column names. For example:
 //
-//   users:
-//	 - id: 1
-//	   name: Alice
-//	   email: alice@example.com
-//	 - id: 2
-//     name: Bob
-//	   email: bob@example.com
+//	  users:
+//		 - id: 1
+//		   name: Alice
+//		   email: alice@example.com
+//		 - id: 2
+//	    name: Bob
+//		   email: bob@example.com
 //
-//   posts:
-//	 - user_id: 1
-//	   title: Hello, world!
-//	 - user_id: 2
-//	   title: Goodbye, world!
-//     is_draft: true
+//	  posts:
+//		 - user_id: 1
+//		   title: Hello, world!
+//		 - user_id: 2
+//		   title: Goodbye, world!
+//	    is_draft: true
 //
 // The above would populate the users and posts tables. Fields that are missing
 // from the YAML are left out of the INSERT statement, and so are populated with
 // the default value for that column.
 func LoadScenario(ctx context.Context, db sqlx.ExtContext, filename string) error {
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		return err
 	}
