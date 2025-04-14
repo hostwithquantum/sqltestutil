@@ -6,6 +6,7 @@ import (
 
 	"github.com/hostwithquantum/sqltestutil"
 	"github.com/jackc/pgx/v5"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -31,7 +32,8 @@ func (s *ContainerTestSuite) TestContainer() {
 func TestContainerSuite(t *testing.T) {
 	ctx := context.Background()
 
-	pg, _ := sqltestutil.StartPostgresContainer(context.Background(), "14")
+	pg, err := sqltestutil.StartPostgresContainer(context.Background(), "14")
+	assert.NoError(t, err)
 	defer pg.Shutdown(ctx)
 
 	suite.Run(t, &ContainerTestSuite{
