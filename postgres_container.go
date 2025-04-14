@@ -10,8 +10,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	imagetypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
@@ -49,19 +49,19 @@ type PostgresContainer struct {
 // container and then run sub-tests within there. The testify [2] suite
 // package provides a good way to structure these kinds of tests:
 //
-//     type ExampleTestSuite struct {
-//         suite.Suite
-//     }
+//	type ExampleTestSuite struct {
+//	    suite.Suite
+//	}
 //
-//     func (s *ExampleTestSuite) TestExample() {
-//         // test something
-//     }
+//	func (s *ExampleTestSuite) TestExample() {
+//	    // test something
+//	}
 //
-//     func TestExampleTestSuite(t *testing.T) {
-//         pg, _ := sqltestutil.StartPostgresContainer(context.Background(), "12")
-//         defer pg.Shutdown(ctx)
-//         suite.Run(t, &ExampleTestSuite{})
-//     }
+//	func TestExampleTestSuite(t *testing.T) {
+//	    pg, _ := sqltestutil.StartPostgresContainer(context.Background(), "12")
+//	    defer pg.Shutdown(ctx)
+//	    suite.Run(t, &ExampleTestSuite{})
+//	}
 //
 // [1]: https://github.com/golang/go/issues/37206
 // [2]: https://github.com/stretchr/testify
@@ -80,7 +80,7 @@ func StartPostgresContainer(ctx context.Context, version string) (*PostgresConta
 		if !notFound {
 			return nil, err
 		}
-		pullReader, err := cli.ImagePull(ctx, image, types.ImagePullOptions{})
+		pullReader, err := cli.ImagePull(ctx, image, imagetypes.PullOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -124,14 +124,14 @@ func StartPostgresContainer(ctx context.Context, version string) (*PostgresConta
 	}
 	defer func() {
 		if err != nil {
-			removeErr := cli.ContainerRemove(ctx, createResp.ID, types.ContainerRemoveOptions{})
+			removeErr := cli.ContainerRemove(ctx, createResp.ID, container.RemoveOptions{})
 			if removeErr != nil {
 				fmt.Println("error removing container:", removeErr)
 				return
 			}
 		}
 	}()
-	err = cli.ContainerStart(ctx, createResp.ID, types.ContainerStartOptions{})
+	err = cli.ContainerStart(ctx, createResp.ID, container.StartOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +186,7 @@ func (c *PostgresContainer) Shutdown(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = cli.ContainerRemove(ctx, c.id, types.ContainerRemoveOptions{})
+	err = cli.ContainerRemove(ctx, c.id, container.RemoveOptions{})
 	if err != nil {
 		return err
 	}
