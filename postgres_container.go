@@ -66,7 +66,10 @@ type PostgresContainer struct {
 // [1]: https://github.com/golang/go/issues/37206
 // [2]: https://github.com/stretchr/testify
 func StartPostgresContainer(ctx context.Context, version string) (*PostgresContainer, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	)
 	if err != nil {
 		panic(err)
 	}
