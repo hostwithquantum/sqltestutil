@@ -22,8 +22,14 @@ pg, err := sqltestutil.StartPostgresContainer(ctx, "14", &sqltestutil.StartOptio
     HealthCheckTimeout: 60 * time.Second,
 })
 
+// Custom image
 pg, err := sqltestutil.StartPostgresContainer(ctx, "14", &sqltestutil.StartOption{
     Image: "registry.example.org/repo/postgres",
+})
+
+// Debug for pull process (e.g. during CI)
+pg, err := sqltestutil.StartPostgresContainer(ctx, "14", &sqltestutil.StartOption{
+    PullProgressWriter: os.Stdout,
 })
 ```
 

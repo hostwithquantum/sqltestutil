@@ -31,6 +31,10 @@ type StartOptions struct {
 
 	// Set the base image (e.g. to a private cache/registry)
 	Image string
+
+	// PullProgressWriter is an optional writer for image pull progress output.
+	// If nil, pull progress is discarded.
+	PullProgressWriter io.Writer
 }
 
 func (o *StartOptions) healthCheckTimeout() time.Duration {
@@ -45,6 +49,13 @@ func (o *StartOptions) image() string {
 		return "postgres"
 	}
 	return o.Image
+}
+
+func (o *StartOptions) pullWriter() io.Writer {
+	if o == nil || o.PullProgressWriter == nil {
+		return io.Discard
+	}
+	return o.PullProgressWriter
 }
 
 // StartPostgresContainer starts a new Postgres Docker container. The version
@@ -115,7 +126,7 @@ func StartPostgresContainer(ctx context.Context, version string, opts ...*StartO
 		if err != nil {
 			return nil, err
 		}
-		_, err = io.Copy(io.Discard, pullReader)
+		_, err = io.Copy(opt.pullWriter(), pullReader)
 		pullReader.Close()
 		if err != nil {
 			return nil, err
