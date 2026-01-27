@@ -21,6 +21,10 @@ pg, err := sqltestutil.StartPostgresContainer(ctx, "14")
 pg, err := sqltestutil.StartPostgresContainer(ctx, "14", &sqltestutil.StartOption{
     HealthCheckTimeout: 60 * time.Second,
 })
+
+pg, err := sqltestutil.StartPostgresContainer(ctx, "14", &sqltestutil.StartOption{
+    Image: "registry.example.org/repo/postgres",
+})
 ```
 
 ### RunMigration

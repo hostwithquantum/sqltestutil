@@ -28,6 +28,9 @@ type StartOptions struct {
 	// HealthCheckTimeout is the maximum time to wait for the container to become healthy.
 	// If zero or negative, defaults to 30 seconds.
 	HealthCheckTimeout time.Duration
+
+	// Set the base image (e.g. to a private cache/registry)
+	Image string
 }
 
 func (o *StartOptions) healthCheckTimeout() time.Duration {
@@ -35,6 +38,13 @@ func (o *StartOptions) healthCheckTimeout() time.Duration {
 		return 30 * time.Second
 	}
 	return o.HealthCheckTimeout
+}
+
+func (o *StartOptions) image() string {
+	if o == nil || o.Image == "" {
+		return "postgres"
+	}
+	return o.Image
 }
 
 // StartPostgresContainer starts a new Postgres Docker container. The version
@@ -91,7 +101,8 @@ func StartPostgresContainer(ctx context.Context, version string, opts ...*StartO
 		panic(err)
 	}
 	defer cli.Close()
-	image := "postgres:" + version
+
+	image := fmt.Sprintf("%s:%s", opt.image(), version)
 	_, _, err = cli.ImageInspectWithRaw(ctx, image)
 	if err != nil {
 		_, notFound := err.(interface {
