@@ -23,6 +23,20 @@ type PostgresContainer struct {
 	port     string
 }
 
+// StartOptions configures the behavior of StartPostgresContainer.
+type StartOptions struct {
+	// HealthCheckTimeout is the maximum time to wait for the container to become healthy.
+	// If zero or negative, defaults to 30 seconds.
+	HealthCheckTimeout time.Duration
+}
+
+func (o *StartOptions) healthCheckTimeout() time.Duration {
+	if o == nil || o.HealthCheckTimeout <= 0 {
+		return 30 * time.Second
+	}
+	return o.HealthCheckTimeout
+}
+
 // StartPostgresContainer starts a new Postgres Docker container. The version
 // parameter is the tagged version of Postgres image to use, e.g. to use
 // postgres:12 pass "12". Creation involes a few steps:
@@ -57,14 +71,18 @@ type PostgresContainer struct {
 //	}
 //
 //	func TestExampleTestSuite(t *testing.T) {
-//	    pg, _ := sqltestutil.StartPostgresContainer(context.Background(), "12")
+//	    pg, _ := sqltestutil.StartPostgresContainer(t.Context(), "12")
 //	    defer pg.Shutdown(ctx)
 //	    suite.Run(t, &ExampleTestSuite{})
 //	}
 //
 // [1]: https://github.com/golang/go/issues/37206
 // [2]: https://github.com/stretchr/testify
-func StartPostgresContainer(ctx context.Context, version string) (*PostgresContainer, error) {
+func StartPostgresContainer(ctx context.Context, version string, opts ...*StartOptions) (*PostgresContainer, error) {
+	var opt *StartOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
 		client.WithAPIVersionNegotiation(),
@@ -146,28 +164,53 @@ func StartPostgresContainer(ctx context.Context, version string) (*PostgresConta
 
 	// Get the actual port Docker assigned
 	var port string
+
+	// Wait for container to become healthy with timeout
+	timeout := opt.healthCheckTimeout()
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
 HealthCheck:
 	for {
-		inspect, err := cli.ContainerInspect(ctx, createResp.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		// Get the assigned port from the container
-		if port == "" && inspect.NetworkSettings != nil {
-			if bindings, ok := inspect.NetworkSettings.Ports["5432/tcp"]; ok && len(bindings) > 0 {
-				port = bindings[0].HostPort
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("context cancelled while waiting for container: %w", ctx.Err())
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return nil, fmt.Errorf("timed out after %v waiting for container to become healthy", timeout)
 			}
-		}
 
-		status := inspect.State.Health.Status
-		switch status {
-		case "unhealthy":
-			return nil, errors.New("container unhealthy")
-		case "healthy":
-			break HealthCheck
-		default:
-			time.Sleep(500 * time.Millisecond)
+			inspect, err := cli.ContainerInspect(ctx, createResp.ID)
+			if err != nil {
+				return nil, err
+			}
+
+			// Get the assigned port from the container
+			if port == "" && inspect.NetworkSettings != nil {
+				if bindings, ok := inspect.NetworkSettings.Ports["5432/tcp"]; ok && len(bindings) > 0 {
+					port = bindings[0].HostPort
+				}
+			}
+
+			if inspect.State.Health == nil {
+				// Health check not yet initialized, keep waiting
+				continue
+			}
+
+			status := inspect.State.Health.Status
+			switch status {
+			case "unhealthy":
+				return nil, errors.New("container unhealthy")
+			case "healthy":
+				break HealthCheck
+			case "starting":
+				// Still starting, keep waiting
+				continue
+			default:
+				// Unknown status, keep waiting
+				continue
+			}
 		}
 	}
 
@@ -222,4 +265,3 @@ func randomPassword() (string, error) {
 	}
 	return string(b), nil
 }
-
