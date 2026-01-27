@@ -9,7 +9,7 @@ import (
 )
 
 func TestStartOptions(t *testing.T) {
-	// use cloudnative-pg's image
+	// use bitnami legacy image with pull progress and extended timeout
 	pg, err := sqltestutil.StartPostgresContainer(t.Context(), "15.1.0-debian-11-r31", &sqltestutil.StartOptions{
 		Image: "bitnamilegacy/postgresql",
 	})
