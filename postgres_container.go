@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"net"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -98,10 +97,7 @@ func StartPostgresContainer(ctx context.Context, version string) (*PostgresConta
 	if err != nil {
 		return nil, err
 	}
-	port, err := randomPort()
-	if err != nil {
-		return nil, err
-	}
+	// Let Docker pick a random port to avoid race conditions
 	createResp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image: image,
 		Env: []string{
@@ -118,7 +114,7 @@ func StartPostgresContainer(ctx context.Context, version string) (*PostgresConta
 	}, &container.HostConfig{
 		PortBindings: nat.PortMap{
 			"5432/tcp": []nat.PortBinding{
-				{HostPort: port},
+				{HostIP: "127.0.0.1", HostPort: "0"},
 			},
 		},
 	}, nil, nil, "")
@@ -147,12 +143,23 @@ func StartPostgresContainer(ctx context.Context, version string) (*PostgresConta
 			}
 		}
 	}()
+
+	// Get the actual port Docker assigned
+	var port string
 HealthCheck:
 	for {
 		inspect, err := cli.ContainerInspect(ctx, createResp.ID)
 		if err != nil {
 			return nil, err
 		}
+
+		// Get the assigned port from the container
+		if port == "" && inspect.NetworkSettings != nil {
+			if bindings, ok := inspect.NetworkSettings.Ports["5432/tcp"]; ok && len(bindings) > 0 {
+				port = bindings[0].HostPort
+			}
+		}
+
 		status := inspect.State.Health.Status
 		switch status {
 		case "unhealthy":
@@ -163,6 +170,11 @@ HealthCheck:
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
+
+	if port == "" {
+		return nil, errors.New("failed to get assigned port from container")
+	}
+
 	return &PostgresContainer{
 		id:       createResp.ID,
 		password: password,
@@ -211,12 +223,3 @@ func randomPassword() (string, error) {
 	return string(b), nil
 }
 
-func randomPort() (string, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return "", err
-	}
-	defer l.Close()
-	_, port, err := net.SplitHostPort(l.Addr().String())
-	return port, err
-}
