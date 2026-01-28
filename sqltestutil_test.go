@@ -1,12 +1,11 @@
 package sqltestutil_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/hostwithquantum/sqltestutil"
 	"github.com/jackc/pgx/v5"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -23,18 +22,16 @@ func (s *ContainerTestSuite) TestContainer() {
 	})
 
 	s.T().Run("ping", func(t *testing.T) {
-		conn, err := pgx.Connect(context.TODO(), s.pgContainer.ConnectionString())
-		s.NoError(err)
-		s.NoError(conn.Ping(context.TODO()))
+		conn, err := pgx.Connect(t.Context(), s.pgContainer.ConnectionString())
+		s.Require().NoError(err)
+		s.NoError(conn.Ping(t.Context()))
 	})
 }
 
 func TestContainerSuite(t *testing.T) {
-	ctx := context.Background()
-
-	pg, err := sqltestutil.StartPostgresContainer(context.Background(), "14")
-	assert.NoError(t, err)
-	defer pg.Shutdown(ctx)
+	pg, err := sqltestutil.StartPostgresContainer(t.Context(), "14")
+	require.NoError(t, err)
+	defer pg.Shutdown(t.Context())
 
 	suite.Run(t, &ContainerTestSuite{
 		pgContainer: pg,

@@ -1,8 +1,6 @@
 module github.com/hostwithquantum/sqltestutil
 
-go 1.23.0
-
-toolchain go1.24.1
+go 1.24.1
 
 require (
 	github.com/docker/docker v28.1.1+incompatible

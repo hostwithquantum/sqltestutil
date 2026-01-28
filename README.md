@@ -13,6 +13,26 @@ Utilities for testing Golang code that runs SQL.
 PostgresContainer is a Docker container running Postgres that can be used to
 cheaply start a throwaway Postgres instance for testing.
 
+```go
+// Default 30 second timeout
+pg, err := sqltestutil.StartPostgresContainer(ctx, "14")
+
+// Custom timeout
+pg, err := sqltestutil.StartPostgresContainer(ctx, "14", &sqltestutil.StartOption{
+    HealthCheckTimeout: 60 * time.Second,
+})
+
+// Custom image
+pg, err := sqltestutil.StartPostgresContainer(ctx, "14", &sqltestutil.StartOption{
+    Image: "registry.example.org/repo/postgres",
+})
+
+// Debug for pull process (e.g. during CI)
+pg, err := sqltestutil.StartPostgresContainer(ctx, "14", &sqltestutil.StartOption{
+    PullProgressWriter: os.Stdout,
+})
+```
+
 ### RunMigration
 
 RunMigration reads all of the files matching *.up.sql in a directory and
