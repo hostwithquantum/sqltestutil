@@ -7,7 +7,7 @@ require (
 	github.com/docker/go-connections v0.6.0
 	github.com/go-yaml/yaml v2.1.0+incompatible
 	github.com/jmoiron/sqlx v1.4.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 )
 
 require (
