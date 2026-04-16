@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/docker/docker v28.5.2+incompatible
-	github.com/docker/go-connections v0.6.0
+	github.com/docker/go-connections v0.7.0
 	github.com/go-yaml/yaml v2.1.0+incompatible
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/stretchr/testify v1.11.1
