@@ -7,13 +7,15 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"net/netip"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
-	imagetypes "github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/client"
-	"github.com/docker/go-connections/nat"
+	cerrdefs "github.com/containerd/errdefs"
+
 	"github.com/jackc/pgx/v5"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/client"
 )
 
 // PostgresContainer is a Docker container running Postgres. It can be used to
@@ -105,9 +107,8 @@ func StartPostgresContainer(ctx context.Context, version string, opts ...*StartO
 	if len(opts) > 0 {
 		opt = opts[0]
 	}
-	cli, err := client.NewClientWithOpts(
+	cli, err := client.New(
 		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
 	)
 	if err != nil {
 		panic(err)
@@ -121,14 +122,14 @@ func StartPostgresContainer(ctx context.Context, version string, opts ...*StartO
 	}
 
 	image := fmt.Sprintf("%s:%s", opt.image(), version)
-	_, err = cli.ImageInspect(ctx, image)
-	if err != nil {
-		if !client.IsErrNotFound(err) {
+
+	if _, err = cli.ImageInspect(ctx, image); err != nil {
+		if !cerrdefs.IsNotFound(err) {
 			return
 		}
 
 		var pullReader io.ReadCloser
-		pullReader, err = cli.ImagePull(ctx, image, imagetypes.PullOptions{})
+		pullReader, err = cli.ImagePull(ctx, image, client.ImagePullOptions{})
 		if err != nil {
 			return
 		}
@@ -146,33 +147,38 @@ func StartPostgresContainer(ctx context.Context, version string, opts ...*StartO
 
 	pg.password = password
 
+	pgPort := network.MustParsePort("5432/tcp")
+
 	// Let Docker pick a random port to avoid race conditions
-	createResp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image: image,
-		Env: []string{
-			"POSTGRES_DB=pgtest",
-			"POSTGRES_PASSWORD=" + pg.password,
-			"POSTGRES_USER=pgtest",
-		},
-		Healthcheck: &container.HealthConfig{
-			Test:     []string{"CMD-SHELL", "pg_isready -h 127.0.0.1 -U pgtest -d pgtest"},
-			Interval: time.Second,
-			Timeout:  5 * time.Second,
-			Retries:  30,
-		},
-	}, &container.HostConfig{
-		PortBindings: nat.PortMap{
-			"5432/tcp": []nat.PortBinding{
-				{HostIP: "127.0.0.1", HostPort: "0"},
+	createResp, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Config: &container.Config{
+			Env: []string{
+				"POSTGRES_DB=pgtest",
+				"POSTGRES_PASSWORD=" + pg.password,
+				"POSTGRES_USER=pgtest",
+			},
+			Healthcheck: &container.HealthConfig{
+				Test:     []string{"CMD-SHELL", "pg_isready -h 127.0.0.1 -U pgtest -d pgtest"},
+				Interval: time.Second,
+				Timeout:  5 * time.Second,
+				Retries:  30,
 			},
 		},
-	}, nil, nil, "")
+		HostConfig: &container.HostConfig{
+			PortBindings: network.PortMap{
+				pgPort: []network.PortBinding{
+					{HostIP: netip.MustParseAddr("127.0.0.1"), HostPort: "0"},
+				},
+			},
+		},
+		Image: image,
+	})
 	if err != nil {
 		return
 	}
 	defer func() {
 		if err != nil {
-			if removeErr := cli.ContainerRemove(ctx, createResp.ID, container.RemoveOptions{
+			if _, removeErr := cli.ContainerRemove(ctx, createResp.ID, client.ContainerRemoveOptions{
 				Force: true,
 			}); removeErr != nil {
 				fmt.Println("error removing container:", removeErr)
@@ -184,13 +190,12 @@ func StartPostgresContainer(ctx context.Context, version string, opts ...*StartO
 	// assign container ID
 	pg.id = createResp.ID
 
-	err = cli.ContainerStart(ctx, createResp.ID, container.StartOptions{})
-	if err != nil {
+	if _, err = cli.ContainerStart(ctx, createResp.ID, client.ContainerStartOptions{}); err != nil {
 		return
 	}
 	defer func() {
 		if err != nil {
-			stopErr := cli.ContainerStop(ctx, createResp.ID, container.StopOptions{})
+			_, stopErr := cli.ContainerStop(ctx, createResp.ID, client.ContainerStopOptions{})
 			if stopErr != nil {
 				fmt.Println("error stopping container:", stopErr)
 				return
@@ -214,34 +219,31 @@ HealthCheck:
 				return nil, fmt.Errorf("timed out after %v waiting for container to become healthy", timeout)
 			}
 
-			inspect, err := cli.ContainerInspect(ctx, createResp.ID)
+			inspect, err := cli.ContainerInspect(ctx, createResp.ID, client.ContainerInspectOptions{Size: false})
 			if err != nil {
 				return nil, err
 			}
 
 			// Get the assigned port from the container
-			if pg.port == "" && inspect.NetworkSettings != nil {
-				if bindings, ok := inspect.NetworkSettings.Ports["5432/tcp"]; ok && len(bindings) > 0 {
+			if pg.port == "" && inspect.Container.NetworkSettings != nil {
+				if bindings, ok := inspect.Container.NetworkSettings.Ports[pgPort]; ok && len(bindings) > 0 {
 					pg.port = bindings[0].HostPort
 				}
 			}
 
-			if inspect.State.Health == nil {
+			if inspect.Container.State.Health == nil {
 				// Health check not yet initialized, keep waiting
 				continue
 			}
 
-			status := inspect.State.Health.Status
+			status := inspect.Container.State.Health.Status
 			switch status {
-			case "unhealthy":
+			case container.Unhealthy:
 				return nil, errors.New("container unhealthy")
-			case "healthy":
+			case container.Healthy:
 				break HealthCheck
-			case "starting":
-				// Still starting, keep waiting
-				continue
 			default:
-				// Unknown status, keep waiting
+				// keep waiting
 				continue
 			}
 		}
@@ -303,11 +305,11 @@ func (c *PostgresContainer) Shutdown(ctx context.Context) error {
 	}
 	defer cli.Close()
 
-	if err := cli.ContainerStop(ctx, c.id, container.StopOptions{}); err != nil {
+	if _, err := cli.ContainerStop(ctx, c.id, client.ContainerStopOptions{}); err != nil {
 		return err
 	}
 
-	if err := cli.ContainerRemove(ctx, c.id, container.RemoveOptions{}); err != nil {
+	if _, err := cli.ContainerRemove(ctx, c.id, client.ContainerRemoveOptions{}); err != nil {
 		return err
 	}
 	return nil
